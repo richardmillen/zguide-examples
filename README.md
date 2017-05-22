@@ -4,7 +4,7 @@ Implementations of the 0MQ examples in [the guide](http://zguide.zeromq.org/page
 
 The examples in this repo make extensive use of [Boost](http://www.boost.org/) and the C++ Standard Library.
 
-The C++ source files live in their own directories. For instance, all the code for the first example [ask and ye shall receive](http://zguide.zeromq.org/page:all#Ask-and-Ye-Shall-Receive) is in `.\ask-and-ye-shall-receive`.
+The C++ source files live in their own directories. For instance, all the code for the first example [ask and ye shall receive](http://zguide.zeromq.org/page:all#Ask-and-Ye-Shall-Receive) is in `./ask-and-ye-shall-receive`.
 
 ## Why Does This Repository Exist?
 
@@ -26,15 +26,15 @@ I implemented the code as I went through [the guide](http://zguide.zeromq.org/pa
 
 I used Visual Studio 2015 for the majority of the work done so far. 
 
-All the solution files are in the `msvc` directory e.g. `.\msvc\ask-and-ye-shall-receive`, where each project uses the code files described above.
+All the solution files are in the `msvc` directory e.g. `./msvc/ask-and-ye-shall-receive`, where each project uses the code files described above.
 
 Define the following environment variables:-
 
 | **Variable Name** | **Example Value** |
 | :---------------- | :---------------- |
-| BOOST_ROOT | `C:\Users\rich\code\ |
-| LIBZMQ_ROOT |  |
-| CPPZMQ_ROOT |  |
+| BOOST_ROOT | `C:\Users\rich\code\boost` |
+| LIBZMQ_ROOT | `C:\Users\rich\code\libzmq` |
+| CPPZMQ_ROOT | `C:\Users\rich\code\cppzmq` |
 
 **IMPORTANT:** The DevStudio solutions are only setup for *Debug x86* builds.
 
