@@ -1,0 +1,8 @@
+*.exe
+*.db
+*.vs
+*.opendb
+*.user
+*.ilk
+Debug
+Release
