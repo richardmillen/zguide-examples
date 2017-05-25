@@ -87,7 +87,7 @@ void server_task() {
 
 	print("Server", "Running proxy...");
 
-	zmq::proxy(&frontend, &backend, nullptr);
+	zmq::proxy(frontend, backend, nullptr);
 
 	print("Server", "Waiting for workers...");
 
