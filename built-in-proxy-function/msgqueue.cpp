@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
 	frontend.bind("tcp://*:5559");
 
 	zmq::socket_t backend(context, ZMQ_DEALER);
-	backend.bind("tcp://*5560");
+	backend.bind("tcp://*:5560");
 
 	zmq::proxy(frontend, backend, nullptr);
 
