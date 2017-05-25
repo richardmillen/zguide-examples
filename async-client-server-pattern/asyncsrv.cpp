@@ -19,10 +19,11 @@ mutex mut;
 
 void client_task();
 void server_task();
-void server_work(zmq::socket_type type);
+void server_work(zmq::socket_type type, size_t num);
 string random_id();
 void print(const string& who, const string& text);
 void print(const string& who, const string& text, zmq::message_t& message);
+void print(const string& who, const string& id, const string& text);
 void print(const string& who, const string& id, zmq::socket_t& socket);
 
 int main(int argc, char* argv[]) {
@@ -52,6 +53,8 @@ void client_task() {
 	client.setsockopt(ZMQ_IDENTITY, id.c_str(), id.size());
 	client.connect("tcp://localhost:5570");
 
+	print("Client", id, "Connected.");
+
 	zmq::pollitem_t items[] = { client, 0, ZMQ_POLLIN, 0 };
 
 	auto request_nbr = 0;
@@ -63,9 +66,13 @@ void client_task() {
 				print("Client", id, client);
 		}
 
+		print("Client", id, "Sending...");
+
 		char request[16] = {};
 		sprintf(request, "request #%d", ++request_nbr);
 		client.send(request, strlen(request));
+
+		print("Client", id, "Sent.");
 	}
 }
 
@@ -82,7 +89,7 @@ void server_task() {
 
 	vector<thread> workers;
 	for (size_t worker_nbr = 0; worker_nbr < 5; ++worker_nbr) {
-		workers.push_back(thread(server_work, zmq::socket_type::dealer));
+		workers.push_back(thread(server_work, zmq::socket_type::dealer, worker_nbr));
 	}
 
 	print("Server", "Running proxy...");
@@ -97,11 +104,14 @@ void server_task() {
 	print("Server", "Finished.");
 }
 
-void server_work(zmq::socket_type type) {
+void server_work(zmq::socket_type type, size_t num) {
 	zmq::context_t context(1);
 
 	zmq::socket_t worker(context, type);
 	worker.connect("inproc://backend");
+
+	char num_buff[2];
+	print("Worker", itoa(num, num_buff, 10), "Connected.");
 
 	random_device rd;
 	mt19937 eng(rd());
@@ -116,6 +126,8 @@ void server_work(zmq::socket_type type) {
 		
 		worker.recv(&id_part);
 		worker.recv(&msg_part);
+
+		print("Worker", num_buff, "Received.");
 
 		auto replies = rep_distr(eng);
 		for (size_t i = 0; i < replies; ++i) {
@@ -157,6 +169,12 @@ void print(const string& who, const string& text, zmq::message_t& message) {
 	string str(static_cast<char*>(message.data()), message.size());
 
 	cout << "asyncsrv: " << who << ": " << text << " - " << str << endl;
+}
+
+void print(const string& who, const string& id, const string& text) {
+	unique_lock<decltype(mut)> lock(mut);
+
+	cout << "asyncsrv: " << who << " (" << id << "): " << text << endl;
 }
 
 void print(const string& who, const string& id, zmq::socket_t& socket) {
