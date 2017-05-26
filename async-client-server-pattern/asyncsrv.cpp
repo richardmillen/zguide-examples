@@ -19,7 +19,7 @@ mutex mut;
 
 void client_task();
 void server_task();
-void server_work(zmq::socket_type type, size_t num);
+void server_work(zmq::context_t* context, size_t num);
 string random_id();
 void print(const string& who, const string& text);
 void print(const string& who, const string& text, zmq::message_t& message);
@@ -66,13 +66,9 @@ void client_task() {
 				print("Client", id, client);
 		}
 
-		print("Client", id, "Sending...");
-
 		char request[16] = {};
 		sprintf(request, "request #%d", ++request_nbr);
 		client.send(request, strlen(request));
-
-		print("Client", id, "Sent.");
 	}
 }
 
@@ -89,14 +85,12 @@ void server_task() {
 
 	vector<thread> workers;
 	for (size_t worker_nbr = 0; worker_nbr < 5; ++worker_nbr) {
-		workers.push_back(thread(server_work, zmq::socket_type::dealer, worker_nbr));
+		workers.push_back(thread(server_work, &context, worker_nbr));
 	}
 
 	print("Server", "Running proxy...");
 
 	zmq::proxy(frontend, backend, nullptr);
-
-	print("Server", "Waiting for workers...");
 
 	for (auto& worker : workers)
 		worker.join();
@@ -104,14 +98,13 @@ void server_task() {
 	print("Server", "Finished.");
 }
 
-void server_work(zmq::socket_type type, size_t num) {
-	zmq::context_t context(1);
+void server_work(zmq::context_t* context, size_t num) {
+	auto id(to_string(num));
 
-	zmq::socket_t worker(context, type);
+	zmq::socket_t worker(*context, zmq::socket_type::dealer);
 	worker.connect("inproc://backend");
 
-	char num_buff[2];
-	print("Worker", itoa(num, num_buff, 10), "Connected.");
+	print("Worker", id, "Connected to backend.");
 
 	random_device rd;
 	mt19937 eng(rd());
@@ -127,12 +120,8 @@ void server_work(zmq::socket_type type, size_t num) {
 		worker.recv(&id_part);
 		worker.recv(&msg_part);
 
-		print("Worker", num_buff, "Received.");
-
 		auto replies = rep_distr(eng);
 		for (size_t i = 0; i < replies; ++i) {
-			print("Worker", "Doing work...");
-
 			sleep(sleep_distr(eng));
 
 			copied_id.copy(&id_part);
@@ -198,7 +187,7 @@ void print(const string& who, const string& id, zmq::socket_t& socket) {
 			}
 		}
 
-		cout << "asyncsrv: " << who << " (" << id << "): " << "[" << setfill('0') << setw(3) << data.size() << "]";
+		cout << "asyncsrv: " << who << " (" << id << "): " << "[" << setfill('0') << setw(3) << data.size() << "] ";
 		for (auto ch : data) {
 			if (is_text)
 				cout << ch;
