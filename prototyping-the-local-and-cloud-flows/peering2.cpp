@@ -10,6 +10,7 @@ namespace po = boost::program_options;
 #include <sstream>
 #include <string>
 #include <vector>
+#include <deque>
 #include <thread>
 #include <random>
 #include <chrono>
@@ -18,13 +19,13 @@ using namespace std;
 
 const char* WORKER_READY = "\001";
 
-void worker_proc(size_t num);
-void client_proc(size_t num);
-vector<string> recv_frames(zmq::socket_t& socket);
-bool send_frames(zmq::socket_t& socket, const vector<string>& frames, const size_t from_index = 0);
+void worker_proc(string conn_addr, size_t num);
+void client_proc(string conn_addr, size_t num);
+deque<string> recv_frames(zmq::socket_t& socket);
+bool send_frames(zmq::socket_t& socket, const deque<string>& frames, const size_t from_index = 0);
 inline bool was_interrupted(int rc);
 inline bool was_interrupted(bool res);
-inline bool was_interrupted(const vector<string>& frames);
+inline bool was_interrupted(const deque<string>& frames);
 
 int main(int argc, char* argv[]) {
 	try {
@@ -94,6 +95,11 @@ int main(int argc, char* argv[]) {
 			clients.push_back(thread(client_proc, client_nbr));
 		}
 
+		random_device rd;
+		mt19937 eng(rd());
+		uniform_int_distribution<> route_distr(0, 5);
+		uniform_int_distribution<> broker_distr(0, peers.size() - 1);
+
 		/*
 		INTERESTING PART:
 		Here, we handle the request-reply flow. We're using load-balancing
@@ -101,8 +107,8 @@ int main(int argc, char* argv[]) {
 		workers available.
 		*/
 
-		auto capacity = 0;
-		vector<string> worker_ids;
+		deque<string> ready_workers;
+		auto next_frame_idx = 1;
 
 		while (true) {
 			zmq::pollitem_t backends[] = {
@@ -110,25 +116,23 @@ int main(int argc, char* argv[]) {
 				{ cloudbe, 0, ZMQ_POLLIN, 0 }
 			};
 
-			if (was_interrupted(zmq::poll(backends, 2, capacity ? 1000 : -1)))
+			if (was_interrupted(zmq::poll(backends, 2, ready_workers.empty() ? -1 : 1000)))
 				break;
 
-			vector<string> frames;
+			deque<string> frames;
 			if (backends[0].revents & ZMQ_POLLIN) {
 				frames = recv_frames(localbe);
 
 				if (was_interrupted(frames))
 					break;
 
-				worker_ids.push_back(frames[0]);
-				++capacity;
+				ready_workers.push_back(frames[0]);
 
-				auto rdy_frame_idx = 1;
 				// TODO: get rid of this if statement - figure out if we have an empty / delimiter frame and write the following section accordingly.
-				if (frames[rdy_frame_idx].size() == 0)
-					++rdy_frame_idx;
+				if (frames[next_frame_idx].size() == 0)
+					++next_frame_idx;
 
-				if (frames[rdy_frame_idx].compare(WORKER_READY) == 0) {
+				if (frames[next_frame_idx].compare(WORKER_READY) == 0) {
 					continue;
 				}
 			}
@@ -138,24 +142,69 @@ int main(int argc, char* argv[]) {
 				if (was_interrupted(frames))
 					break;
 
-				// we don't use peer broker identity for anything
+				// TODO: get rid of this if statement (as above)
+				if (frames[next_frame_idx].size() == 0)
+					++next_frame_idx;
 			}
-
-			auto next_frame_idx = 1;
-			// TODO: get rid of this if statement (as above)
-			if (frames[next_frame_idx].size() == 0)
-				++next_frame_idx;
 
 			for (auto& broker : peers) {
 				if (frames[next_frame_idx].compare(broker) == 0) {
 					send_frames(cloudfe, frames, next_frame_idx);
+					frames.clear();
 				}
 			}
 
-			// route reply to client
+			if (!frames.empty())
+				send_frames(localfe, frames, next_frame_idx);
 
-			// http://zguide.zeromq.org/page:all#Prototyping-the-Local-and-Cloud-Flows
+			// route as many client requests as we have workers available
+			// we may reroute requests from our local frontend, but not from
+			// the cloud frontend. we reroute randomly now, just to test things
+			// out. in the next version, we'll do this properly by calculating
+			// cloud capacity.
 
+			while (ready_workers.size()) {
+				zmq::pollitem_t frontends[] = {
+					{ localfe, 0, ZMQ_POLLIN, 0 },
+					{ cloudfe, 0, ZMQ_POLLIN, 0 }
+				};
+
+				auto rc = zmq::poll(frontends, 2, 0);
+				assert(rc >= 0);
+
+				auto reroutable = false;
+
+				if (frontends[1].revents & ZMQ_POLLIN) {
+					frames = recv_frames(cloudfe);
+				}
+				else if (frontends[0].revents & ZMQ_POLLIN) {
+					frames = recv_frames(localfe);
+					reroutable = true;
+				}
+				else {
+					// no work, go back to backends
+					break;
+				}
+
+				// if reroutable, send to cloud 20% of the time
+				// here we'd normally use cloud status information
+
+				if (reroutable && peers.size() > 0 && route_distr(eng) == 0) {
+					// route to random broker
+					auto& broker = peers.at(broker_distr(eng));
+					frames.push_front(broker);
+					send_frames(cloudbe, frames);
+				}
+				else {
+					auto id(ready_workers[0]);
+					ready_workers.pop_front();
+
+					frames.push_front(string());
+					frames.push_front(id);
+
+					send_frames(localbe, frames);
+				}
+			}
 		}
 	}
 	catch (exception& e) {
@@ -165,22 +214,60 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void worker_proc(size_t num) {
+// worker_proc is the worker task, which plugs 
+// into the load-balancer using a REQ socket.
+void worker_proc(string conn_addr, size_t num) {
+	zmq::context_t context(1);
+	zmq::socket_t worker(context, ZMQ_REQ);
+	worker.connect("tcp://" + conn_addr);
 
+	cout << "Worker #" << num << ": Connected to " << conn_addr << endl;
+
+	worker.send(WORKER_READY, strlen(WORKER_READY));
+
+	while (true) {
+		auto frames = recv_frames(worker);
+
+		if (was_interrupted(frames))
+			break;
+
+		cout << "Worker #" << num << ": " << frames.back() << endl;
+		frames.back().assign("OK");
+
+		send_frames(worker, frames);
+	}
 }
 
-void client_proc(size_t num) {
+// client_proc is the client task, which does a request-reply
+// dialog using a standard synchronous REQ socket.
+void client_proc(string conn_addr, size_t num) {
+	zmq::context_t context(1);
+	zmq::socket_t client(context, ZMQ_REQ);
+	client.connect("tcp://" + conn_addr);
 
+	cout << "Client #" << num << ": Connected to " << conn_addr << endl;
+	
+	while (true) {
+		client.send("HELLO", 5);
+
+		zmq::message_t reply;
+		if (was_interrupted(client.recv(&reply)))
+			break;
+
+		string str(static_cast<char*>(reply.data()), reply.size());
+
+		cout << "Client #" << num << ": " << str << endl;
+	}
 }
 
-vector<string> recv_frames(zmq::socket_t& socket) {
-	vector<string> frames;
+deque<string> recv_frames(zmq::socket_t& socket) {
+	deque<string> frames;
 
 	auto more_frames = TRUE;
 	while (more_frames) {
 		zmq::message_t message;
 		if (was_interrupted(socket.recv(&message)))
-			return vector<string>();
+			return deque<string>();
 
 		frames.push_back(string(static_cast<char*>(message.data()), message.size()));
 
@@ -193,7 +280,8 @@ vector<string> recv_frames(zmq::socket_t& socket) {
 	return frames;
 }
 
-bool send_frames(zmq::socket_t& socket, const vector<string>& frames, const size_t from_index) {
+// TODO: this isn't making use of the bool return value. is it needed?
+bool send_frames(zmq::socket_t& socket, const deque<string>& frames, const size_t from_index) {
 	auto from = frames.begin() + from_index;
 	auto to = frames.end() - 1;
 
@@ -211,7 +299,7 @@ bool send_frames(zmq::socket_t& socket, const vector<string>& frames, const size
 TODO: was_interrupted: check for error state to ensure we do in fact have an ETERM and nothing serious!
 */
 
-inline bool was_interrupted(const vector<string>& frames) {
+inline bool was_interrupted(const deque<string>& frames) {
 	return frames.size() == 0;
 }
 
