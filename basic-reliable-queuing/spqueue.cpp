@@ -9,7 +9,14 @@ void check_version(int want_major, int want_minor);
 int main(int argc, char* argv[]) {
 	check_version(2, 1);
 
-	//http://zguide.zeromq.org/cpp:spqueue
+	zmq::context_t context(1);
+	zmq::socket_t frontend(context, ZMQ_ROUTER);
+	zmq::socket_t backend(context, ZMQ_ROUTER);
+
+	frontend.bind("tcp://*:5555");
+	bactend.bind("tcp://*:5556");
+	
+
 
 	return 0;
 }
