@@ -15,18 +15,36 @@ namespace po = boost::program_options;
 #include <random>
 #include <chrono>
 #include <algorithm>
+#include <functional>
+#include <mutex>
 using namespace std;
 
 const char* WORKER_READY = "\001";
 
-void worker_proc(string conn_addr, size_t num);
-void client_proc(string conn_addr, size_t num);
+mutex mut;
+
+void worker_proc(const string conn_addr, const size_t num);
+void client_proc(const string conn_addr, const size_t num);
 deque<string> recv_frames(zmq::socket_t& socket);
-bool send_frames(zmq::socket_t& socket, const deque<string>& frames, const size_t from_index = 0);
+bool send_frames(zmq::socket_t& socket, const deque<string>& frames);
+void print_frames(const deque<string>& frames, const string& hint);
+inline void sync(function<void()> fn);
 inline bool was_interrupted(int rc);
 inline bool was_interrupted(bool res);
 inline bool was_interrupted(const deque<string>& frames);
 
+/*
+the broker part of this app uses four sockets:
+	1) local frontend: clients connect to this. they send REQ(uest)s, and expect REP(ly)s.
+	2) local backend: workers connect to this. the send REQ(uests)s for work, and expect REP(ly)s from us, containing the REQ(uest) sent by a client or peer broker.
+	3) cloud frontend: peer brokers connect to this, in order to send REQ(uest)s to us on behalf of their own clients.
+	4) cloud backend: we connect to this, in order to forward REQ(uest)s from our clients to peer brokers.
+
+e.g.
+./peering2 --cloud-port=5551 --peer=localhost:5552 --peer=localhost:5553 --frontend-port=5561 --backend-port=5562
+./peering2 --cloud-port=5552 --peer=localhost:5551 --peer=localhost:5553 --frontend-port=5571 --backend-port=5572
+./peering2 --cloud-port=5553 --peer=localhost:5551 --peer=localhost:5552 --frontend-port=5581 --backend-port=5582
+*/
 int main(int argc, char* argv[]) {
 	try {
 		ostringstream oss;
@@ -36,6 +54,7 @@ int main(int argc, char* argv[]) {
 		int localbe_port;
 		int client_count;
 		int worker_count;
+
 		po::options_description desc("Options");
 		desc.add_options()
 			("help", "prints this help message")
@@ -73,7 +92,7 @@ int main(int argc, char* argv[]) {
 		for (const auto& peer : peers) {
 			cloudbe.connect("tcp://" + peer);
 
-			cout << "peering2: Connected to " << peer << "." << endl;
+			cout << "peering2: Connected to peer broker '" << peer << "'." << endl;
 		}
 
 		zmq::socket_t localfe(context, ZMQ_ROUTER);
@@ -82,17 +101,23 @@ int main(int argc, char* argv[]) {
 		zmq::socket_t localbe(context, ZMQ_ROUTER);
 		localbe.bind("tcp://*:" + to_string(localbe_port));
 
-		cout << "Press enter when all brokers are started: ";
+		cout << "peering2: Listening for peer broker requests on port #" << cloudfe_port << "..." << endl;
+		cout << "peering2: Listening for client requests on port #" << localfe_port << "..." << endl;
+		cout << "peering2: Listening for workers on port #" << localbe_port << "..." << endl;
+
+		cout << "peering2: Press enter when all brokers are started: " << flush;
 		getchar();
+
+		cout << "peering2: Starting " << worker_count << " workers and " << client_count << " clients..." << endl;
 
 		vector<thread> workers;
 		for (size_t worker_nbr = 0; worker_nbr < worker_count; ++worker_nbr) {
-			workers.push_back(thread(worker_proc, worker_nbr));
+			workers.push_back(thread(worker_proc, string("localhost:" + to_string(localbe_port)), worker_nbr));
 		}
 
 		vector<thread> clients;
 		for (size_t client_nbr = 0; client_nbr < client_count; ++client_nbr) {
-			clients.push_back(thread(client_proc, client_nbr));
+			clients.push_back(thread(client_proc, string("localhost:" + to_string(localfe_port)), client_nbr));
 		}
 
 		random_device rd;
@@ -108,8 +133,7 @@ int main(int argc, char* argv[]) {
 		*/
 
 		deque<string> ready_workers;
-		auto next_frame_idx = 1;
-
+		
 		while (true) {
 			zmq::pollitem_t backends[] = {
 				{ localbe, 0, ZMQ_POLLIN, 0 },
@@ -119,43 +143,53 @@ int main(int argc, char* argv[]) {
 			if (was_interrupted(zmq::poll(backends, 2, ready_workers.empty() ? -1 : 1000)))
 				break;
 
-			deque<string> frames;
+			deque<string> rep_frames;
 			if (backends[0].revents & ZMQ_POLLIN) {
-				frames = recv_frames(localbe);
+				rep_frames = recv_frames(localbe);
 
-				if (was_interrupted(frames))
+				if (was_interrupted(rep_frames))
 					break;
 
-				ready_workers.push_back(frames[0]);
+				assert(rep_frames.front().empty() == false);
+				
+				auto id(rep_frames.front());
+				ready_workers.push_back(id);
+				rep_frames.pop_front();
 
-				// TODO: get rid of this if statement - figure out if we have an empty / delimiter frame and write the following section accordingly.
-				if (frames[next_frame_idx].size() == 0)
-					++next_frame_idx;
-
-				if (frames[next_frame_idx].compare(WORKER_READY) == 0) {
-					continue;
+				assert(rep_frames.front().empty());
+				
+				rep_frames.pop_front();
+				
+				if (rep_frames.front().compare(WORKER_READY) == 0) {
+					rep_frames.clear();
 				}
 			}
 			else if (backends[1].revents & ZMQ_POLLIN) {
-				frames = recv_frames(cloudbe);
+				sync([]() {
+					cout << "peering2: Receiving reply from peer broker..." << endl;
+				});
 
-				if (was_interrupted(frames))
+				rep_frames = recv_frames(cloudbe);
+
+				if (was_interrupted(rep_frames))
 					break;
 
-				// TODO: get rid of this if statement (as above)
-				if (frames[next_frame_idx].size() == 0)
-					++next_frame_idx;
+				// we don't use peer broker identity for anything
+				rep_frames.pop_front();
 			}
 
-			for (auto& broker : peers) {
-				if (frames[next_frame_idx].compare(broker) == 0) {
-					send_frames(cloudfe, frames, next_frame_idx);
-					frames.clear();
+			if (!rep_frames.empty()) {
+				for (auto& broker : peers) {
+					if (rep_frames.front().compare(broker) == 0) {
+						send_frames(cloudfe, rep_frames);
+						rep_frames.clear();
+						break;
+					}
 				}
 			}
 
-			if (!frames.empty())
-				send_frames(localfe, frames, next_frame_idx);
+			if (!rep_frames.empty())
+				send_frames(localfe, rep_frames);
 
 			// route as many client requests as we have workers available
 			// we may reroute requests from our local frontend, but not from
@@ -163,22 +197,28 @@ int main(int argc, char* argv[]) {
 			// out. in the next version, we'll do this properly by calculating
 			// cloud capacity.
 
-			while (ready_workers.size()) {
+			while (!ready_workers.empty()) {
 				zmq::pollitem_t frontends[] = {
-					{ localfe, 0, ZMQ_POLLIN, 0 },
-					{ cloudfe, 0, ZMQ_POLLIN, 0 }
+					{ cloudfe, 0, ZMQ_POLLIN, 0 },
+					{ localfe, 0, ZMQ_POLLIN, 0 }
 				};
 
 				auto rc = zmq::poll(frontends, 2, 0);
 				assert(rc >= 0);
 
+				deque<string> req_frames;
 				auto reroutable = false;
 
-				if (frontends[1].revents & ZMQ_POLLIN) {
-					frames = recv_frames(cloudfe);
+				// we'll do peer brokers first, to prevent starvation
+				if (frontends[0].revents & ZMQ_POLLIN) {
+					sync([]() {
+						cout << "peering2: Receiving request from peer broker..." << endl;
+					});
+
+					req_frames = recv_frames(cloudfe);
 				}
-				else if (frontends[0].revents & ZMQ_POLLIN) {
-					frames = recv_frames(localfe);
+				else if (frontends[1].revents & ZMQ_POLLIN) {
+					req_frames = recv_frames(localfe);
 					reroutable = true;
 				}
 				else {
@@ -189,20 +229,20 @@ int main(int argc, char* argv[]) {
 				// if reroutable, send to cloud 20% of the time
 				// here we'd normally use cloud status information
 
-				if (reroutable && peers.size() > 0 && route_distr(eng) == 0) {
-					// route to random broker
+				if (reroutable && !peers.empty() > 0 && route_distr(eng) == 0) {
 					auto& broker = peers.at(broker_distr(eng));
-					frames.push_front(broker);
-					send_frames(cloudbe, frames);
+					
+					req_frames.push_front(broker);
+					send_frames(cloudbe, req_frames);
 				}
 				else {
-					auto id(ready_workers[0]);
+					auto id(ready_workers.front());
 					ready_workers.pop_front();
 
-					frames.push_front(string());
-					frames.push_front(id);
+					req_frames.push_front(string());
+					req_frames.push_front(id);
 
-					send_frames(localbe, frames);
+					send_frames(localbe, req_frames);
 				}
 			}
 		}
@@ -216,14 +256,22 @@ int main(int argc, char* argv[]) {
 
 // worker_proc is the worker task, which plugs 
 // into the load-balancer using a REQ socket.
-void worker_proc(string conn_addr, size_t num) {
+void worker_proc(const string conn_addr, const size_t num) {
 	zmq::context_t context(1);
 	zmq::socket_t worker(context, ZMQ_REQ);
 	worker.connect("tcp://" + conn_addr);
 
-	cout << "Worker #" << num << ": Connected to " << conn_addr << endl;
+	sync([&]() {
+		cout << "peering2: Worker #" << num << ": Sending ready message to " << conn_addr << endl;
+	});
 
-	worker.send(WORKER_READY, strlen(WORKER_READY));
+	zmq::message_t ready_msg(1);
+	memcpy(ready_msg.data(), WORKER_READY, 1);
+	worker.send(ready_msg);
+
+	sync([&]() {
+		cout << "peering2: Worker #" << num << ": Waiting for requests..." << endl;
+	});
 
 	while (true) {
 		auto frames = recv_frames(worker);
@@ -231,7 +279,8 @@ void worker_proc(string conn_addr, size_t num) {
 		if (was_interrupted(frames))
 			break;
 
-		cout << "Worker #" << num << ": " << frames.back() << endl;
+		print_frames(frames, "Worker #" + to_string(num) + " received:");
+		
 		frames.back().assign("OK");
 
 		send_frames(worker, frames);
@@ -240,15 +289,19 @@ void worker_proc(string conn_addr, size_t num) {
 
 // client_proc is the client task, which does a request-reply
 // dialog using a standard synchronous REQ socket.
-void client_proc(string conn_addr, size_t num) {
+void client_proc(const string conn_addr, const size_t num) {
 	zmq::context_t context(1);
 	zmq::socket_t client(context, ZMQ_REQ);
 	client.connect("tcp://" + conn_addr);
 
-	cout << "Client #" << num << ": Connected to " << conn_addr << endl;
+	sync([&]() {
+		cout << "peering2: Client #" << num << ": Connected to " << conn_addr << endl;
+	});
 	
 	while (true) {
-		client.send("HELLO", 5);
+		zmq::message_t request(5);
+		memcpy(request.data(), "HELLO", 5);
+		client.send(request);
 
 		zmq::message_t reply;
 		if (was_interrupted(client.recv(&reply)))
@@ -256,7 +309,9 @@ void client_proc(string conn_addr, size_t num) {
 
 		string str(static_cast<char*>(reply.data()), reply.size());
 
-		cout << "Client #" << num << ": " << str << endl;
+		sync([&]() {
+			cout << "peering2: Client #" << num << ": Received '" << str << "'." << endl;
+		});
 	}
 }
 
@@ -281,18 +336,36 @@ deque<string> recv_frames(zmq::socket_t& socket) {
 }
 
 // TODO: this isn't making use of the bool return value. is it needed?
-bool send_frames(zmq::socket_t& socket, const deque<string>& frames, const size_t from_index) {
-	auto from = frames.begin() + from_index;
-	auto to = frames.end() - 1;
+bool send_frames(zmq::socket_t& socket, const deque<string>& frames) {
+	auto penultimate = frames.end() - 1;
 
-	for_each(from, to, [&socket](const string& f) {
-		socket.send(f.c_str(), f.size(), ZMQ_SNDMORE);
+	for_each(frames.begin(), penultimate, [&](const string& f) {
+		zmq::message_t message(f.size());
+		memcpy(message.data(), f.c_str(), f.size());
+		socket.send(message, ZMQ_SNDMORE);
 	});
 
-	auto last = frames.back();
-	socket.send(last.c_str(), last.size());
+	auto last_str(frames.back());
+	zmq::message_t last_frame(last_str.size());
+
+	memcpy(last_frame.data(), last_str.c_str(), last_str.size());
+	socket.send(last_frame);
 
 	return true;
+}
+
+void print_frames(const deque<string>& frames, const string& hint) {
+	sync([&]() {
+		cout << "peering2: " << hint << endl;
+
+		for (size_t i = 0; i < frames.size(); ++i)
+			cout << "peering2: Frame #" << i << ":\t'" << frames[i] << "'." << endl;
+	});
+}
+
+inline void sync(function<void()> fn) {
+	unique_lock<decltype(mut)> lock(mut);
+	fn();
 }
 
 /*
