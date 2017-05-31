@@ -7,6 +7,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "spqueue", "spqueue\spqueue.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "spworker", "spworker\spworker.vcxproj", "{02F11D84-72B1-4C59-9670-07F27D247E94}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "client-side-reliability", "client-side-reliability", "{7AF98443-54B5-4CB6-9277-140B56E37042}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lpclient", "..\client-side-reliability\lpclient\lpclient.vcxproj", "{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,8 +35,19 @@ Global
 		{02F11D84-72B1-4C59-9670-07F27D247E94}.Release|x64.Build.0 = Release|x64
 		{02F11D84-72B1-4C59-9670-07F27D247E94}.Release|x86.ActiveCfg = Release|Win32
 		{02F11D84-72B1-4C59-9670-07F27D247E94}.Release|x86.Build.0 = Release|Win32
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}.Debug|x64.ActiveCfg = Debug|x64
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}.Debug|x64.Build.0 = Debug|x64
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}.Debug|x86.ActiveCfg = Debug|Win32
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}.Debug|x86.Build.0 = Debug|Win32
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}.Release|x64.ActiveCfg = Release|x64
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}.Release|x64.Build.0 = Release|x64
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}.Release|x86.ActiveCfg = Release|Win32
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{2ED8FB68-7360-4FCF-84C6-9A51BBDD057B} = {7AF98443-54B5-4CB6-9277-140B56E37042}
 	EndGlobalSection
 EndGlobal
