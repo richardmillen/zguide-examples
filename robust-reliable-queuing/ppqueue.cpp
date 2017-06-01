@@ -11,10 +11,8 @@
 #include <map>
 using namespace std;
 
-bool check_version(int wants_major, int wants_minor);
-
 int main(int argc, char* argv[]) {
-	if (!check_version(4, 0))
+	if (!pp::check_version(4, 0))
 		return 1;
 
 	zmq::context_t context(1);
@@ -91,18 +89,4 @@ int main(int argc, char* argv[]) {
 	}
 	
 	return 0;
-}
-
-bool check_version(int wants_major, int wants_minor) {
-	auto ver = zmq::version();
-
-	if (get<0>(ver) > wants_major)
-		return true;
-	if (get<0>(ver) == wants_major && get<1>(ver) >= wants_minor)
-		return true;
-
-	cerr << "You're using 0MQ " << get<0>(ver) << "." << get<1>(ver) << ".\n" <<
-		"You need at least " << wants_major << "." << wants_minor << "." << endl;
-
-	return false;
 }

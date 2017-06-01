@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <deque>
+#include <tuple>
 #include <chrono>
 
 namespace pp // paranoid pirate
@@ -12,6 +13,21 @@ namespace pp // paranoid pirate
 	static const unsigned heartbeat_liveness = 3; // 3-5 is reasonable
 	static const std::chrono::seconds heartbeat_interval = std::chrono::seconds(1);
 	static const std::chrono::seconds ttl = std::chrono::seconds(heartbeat_interval * heartbeat_liveness);
+	static const std::chrono::seconds interval_max = std::chrono::seconds(32);
+
+	bool check_version(int wants_major, int wants_minor) {
+		auto ver = zmq::version();
+
+		if (std::get<0>(ver) > wants_major)
+			return true;
+		if (std::get<0>(ver) == wants_major && std::get<1>(ver) >= wants_minor)
+			return true;
+
+		std::cerr << "You're using 0MQ " << std::get<0>(ver) << "." << std::get<1>(ver) << ".\n" <<
+			"You need at least " << wants_major << "." << wants_minor << "." << std::endl;
+
+		return false;
+	}
 
 	std::deque<std::string> recv_frames(zmq::socket_t& socket) {
 		std::deque<std::string> frames;
