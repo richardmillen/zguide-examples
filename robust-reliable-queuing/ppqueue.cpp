@@ -13,9 +13,6 @@ using namespace std;
 
 bool check_version(int wants_major, int wants_minor);
 
-static const unsigned HEARTBEAT_LIVENESS = 3; // 3-5 is reasonable
-static const unsigned HEARTBEAT_INTERVAL = 1; // seconds
-
 int main(int argc, char* argv[]) {
 	if (!check_version(4, 0))
 		return 1;
@@ -26,10 +23,10 @@ int main(int argc, char* argv[]) {
 	frontend.bind("tcp://*:5555");
 	backend.bind("tcp://*:5556");
 
-	pp::workers_t workers;
+	pp::workers_t workers(pp::ttl);
 
-	auto heartbeat_at = chrono::system_clock::now() + 
-		chrono::seconds(HEARTBEAT_INTERVAL);
+	auto heartbeat_at = chrono::system_clock::now() +
+		pp::heartbeat_interval;
 	
 	while (true) {
 		zmq::pollitem_t items[] = {
@@ -39,12 +36,15 @@ int main(int argc, char* argv[]) {
 
 		// don't poll frontend if we don't have any workers available
 		if (workers.empty())
-			zmq::poll(items, 1, chrono::seconds(HEARTBEAT_INTERVAL));
+			zmq::poll(items, 1, pp::heartbeat_interval);
 		else
-			zmq::poll(items, 2, chrono::seconds(HEARTBEAT_INTERVAL));
+			zmq::poll(items, 2, pp::heartbeat_interval);
 
 		if (items[0].revents & ZMQ_POLLIN) {
 			auto frames = pp::recv_frames(backend);
+			if (pp::was_interrupted(frames))
+				break;
+
 			auto id(frames.front());
 			frames.pop_front();
 			
@@ -79,14 +79,15 @@ int main(int argc, char* argv[]) {
 		}
 
 		// send heartbeats to idle workers if it's time
-		if (chrono::system_clock::now() > heartbeat_at) { 
-			for (auto& w : workers) 
-				backend.send(w.c_str(), w.size());
+		if (chrono::system_clock::now() > heartbeat_at) {
+			for (auto& id : workers) 
+				backend.send(id.c_str(), id.size());
 
-			heartbeat_at = chrono::system_clock::now() + 
-				chrono::seconds(HEARTBEAT_INTERVAL);
+			heartbeat_at = chrono::system_clock::now() +
+				pp::heartbeat_interval;
 		}
-		// s_queue_purge(queue);
+
+		workers.purge();
 	}
 	
 	return 0;

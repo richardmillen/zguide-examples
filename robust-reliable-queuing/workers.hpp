@@ -1,40 +1,38 @@
-
 #pragma once
 
+#include <chrono>
 #include <string>
+#include <deque>
+#include <unordered_map>
 
 namespace pp
 {
-	struct worker_t;
-
-	// how do we support an ordered queue, with random removal? 
-	// + boost::multi_index?
-	// 
-	// what are the conditions under which a worker will be removed from the queue?
-	// + if the worker thinks the broker has gone (but hasn't) then comes back online.
-	// + if the worker itself disappears the broker should remove it.
-	// 
-	// what about refreshing the 'last heartbeat' of the worker? that will also need random access.
+	// TODO: try updating to use boost::multi_index_container.
+	// http://www.boost.org/doc/libs/1_39_0/libs/multi_index/doc/index.html
 	class workers_t
 	{
 	public:
-		workers_t();
-		~workers_t();
-
-		workers_t& operator++();
-		
-		// HACK: the following operators were omitted from this example:
-		// + prefix decrement
-		// + postfix inc/dec operators
+		workers_t(std::chrono::seconds ttl);
 
 		bool empty() const;
 		void erase(const std::string& identity);
 		void push(const std::string& identity);
 		void refresh(const std::string& identity);
-		std::string front() const;
+		const std::string& front() const;
 		void pop();
+		void purge();
+		
+		auto pp::workers_t::begin() {
+			return queue_.begin();
+		}
+
+		auto pp::workers_t::end() {
+			return queue_.end();
+		}
 
 	private:
-		
+		std::chrono::seconds ttl_;
+		std::deque<std::string> queue_;
+		std::unordered_map<std::string, std::chrono::time_point<std::chrono::system_clock>> lookup_;
 	};
 }
