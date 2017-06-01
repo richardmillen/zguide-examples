@@ -114,6 +114,7 @@ unique_ptr<zmq::socket_t> new_socket(zmq::context_t& context, const string& id) 
 	auto socket(make_unique<zmq::socket_t>(context, ZMQ_DEALER));
 
 	socket->setsockopt(ZMQ_IDENTITY, id.c_str(), id.size());
+	socket->connect("tcp://localhost:5556");
 
 	auto linger = 0;
 	socket->setsockopt(ZMQ_LINGER, &linger, sizeof(linger));
