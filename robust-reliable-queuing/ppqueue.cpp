@@ -76,16 +76,18 @@ int main(int argc, char* argv[]) {
 			pp::send_frames(backend, frames);
 		}
 
-		// send heartbeats to idle workers if it's time
-		if (chrono::system_clock::now() > heartbeat_at) {
-			for (auto& id : workers) 
-				backend.send(id.c_str(), id.size());
+		if (!workers.empty()) {
+			// send heartbeats to idle workers if it's time
+			if (chrono::system_clock::now() > heartbeat_at) {
+				for (auto& id : workers)
+					backend.send(id.c_str(), id.size());
 
-			heartbeat_at = chrono::system_clock::now() +
-				pp::heartbeat_interval;
+				heartbeat_at = chrono::system_clock::now() +
+					pp::heartbeat_interval;
+			}
+
+			workers.purge();
 		}
-
-		workers.purge();
 	}
 	
 	return 0;
