@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
 	while (retries_left) {
 		auto req_str(to_string(++sequence));
 
-		cout << "lpclient: Sending request to server..." << endl;
+		cout << "lpclient: Sending request '" << req_str << "' to server..." << endl;
 
 		client.send(req_str.c_str(), req_str.size());
 
@@ -60,8 +60,11 @@ int main(int argc, char* argv[]) {
 			}
 			else {
 				cerr << "lpclient: No response from server, retrying..." << endl;
+				
 				client = make_socket(context);
 				client.send(req_str.c_str(), req_str.size());
+
+				cout << "lpclient: Request sent." << endl;
 			}
 		}
 	}

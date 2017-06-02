@@ -14,13 +14,8 @@ using namespace std;
 #define getpid()		::_getpid()
 #endif
 
-unique_ptr<zmq::socket_t> new_socket(zmq::context_t& context, const string& id);
+zmq::socket_t new_socket(zmq::context_t& context, const string& id);
 string get_id();
-inline void print_message(ostream& os, const string& id, const string& msg);
-
-#define print_info(id, str)		print_message(cout, id, str)
-#define print_warn(id, str)		print_message(cerr, id, str)
-#define print_error(id, str)	print_message(cerr, id, str)
 
 int main(int argc, char* argv[]) {
 	if (!pp::check_version(4, 0))
@@ -32,7 +27,8 @@ int main(int argc, char* argv[]) {
 	auto worker = new_socket(context, id);
 
 	auto heartbeat_at = 
-		chrono::system_clock::now() + pp::heartbeat_interval;
+		chrono::system_clock::now() +
+		pp::heartbeat_interval;
 
 	auto timeout = pp::heartbeat_interval;
 	auto liveness = pp::heartbeat_liveness;
@@ -43,40 +39,42 @@ int main(int argc, char* argv[]) {
 
 	auto cycles = 0;
 	while (true) {
-		zmq::pollitem_t items[] = { *worker, 0, ZMQ_POLLIN, 0 };
-		zmq::poll(items, 1, timeout);
+		zmq::pollitem_t items[] = { worker, 0, ZMQ_POLLIN, 0 };
+		zmq::poll(items, 1, pp::heartbeat_interval);
 
 		if (items[0].revents & ZMQ_POLLIN) {
 			/* Get message
 			- 3-part envelope + content -> request
 			- 1-part "HEARTBEAT" -> heartbeat */
 
-			auto frames = pp::recv_frames(*worker);
+			auto frames = pp::recv_frames(worker);
 			if (pp::was_interrupted(frames))
 				break;
 
 			if (frames.size() == 3) {
 				++cycles;
 				if (cycles > 10 && distr(eng) == 0) {
-					print_info(id, "Simulating crash...");
+					pp::print_info(id, "Simulating crash...");
 					break;
 				}
 				else if (cycles > 5 && distr(eng) == 0) {
-					print_info(id, "Simulating CPU overload...");
+					pp::print_info(id, "Simulating CPU overload...");
 					this_thread::sleep_for(5s);
 				}
 
-				print_info(id, "Sending echo - '" + frames.back() + "'");
-				pp::send_frames(*worker, frames);
-
-				liveness = pp::heartbeat_liveness;
+				pp::print_info(id, "Doing some \"heavy work\"...");
 				this_thread::sleep_for(1s);
+				
+				pp::print_info(id, "Sending echo - '" + frames.back() + "'");
+				pp::send_frames(worker, frames);
+				liveness = pp::heartbeat_liveness;
 			}
 			else if (frames.size() == 1 && frames.back().compare("HEARTBEAT") == 0) {
+				pp::print_debug(id, "Received heartbeat from queue.");
 				liveness = pp::heartbeat_liveness;
 			}
 			else {
-				print_error(id, "Invalid message.");
+				pp::print_error(id, "Invalid message.");
 				pp::print_frames(frames);
 				break;
 			}
@@ -85,8 +83,8 @@ int main(int argc, char* argv[]) {
 			timeout = pp::heartbeat_interval;
 		}
 		else if (--liveness == 0) {
-			print_warn(id, "Heartbeat failure, queue unreachable.");
-			print_info(id, "Reconnecting in " + to_string(timeout.count()) + " seconds...");
+			pp::print_warn(id, "Heartbeat failure, queue unreachable.");
+			pp::print_info(id, "Reconnecting in " + to_string(timeout.count()) + " seconds...");
 
 			this_thread::sleep_for(timeout);
 
@@ -99,39 +97,36 @@ int main(int argc, char* argv[]) {
 
 		if (chrono::system_clock::now() > heartbeat_at) {
 			heartbeat_at =
-				chrono::system_clock::now() + pp::heartbeat_interval;
+				chrono::system_clock::now() + 
+				pp::heartbeat_interval;
 
-			print_info(id, "Sending heartbeat...");
+			pp::print_debug(id, "Sending heartbeat...");
 
-			worker->send("HEARTBEAT", 9);
+			worker.send("HEARTBEAT", 9);
 		}
 	}
 
 	return 0;
 }
 
-unique_ptr<zmq::socket_t> new_socket(zmq::context_t& context, const string& id) {
-	auto socket(make_unique<zmq::socket_t>(context, ZMQ_DEALER));
+zmq::socket_t new_socket(zmq::context_t& context, const string& id) {
+	zmq::socket_t socket(context, ZMQ_DEALER);
 
-	socket->setsockopt(ZMQ_IDENTITY, id.c_str(), id.size());
-	socket->connect("tcp://localhost:5556");
+	socket.setsockopt(ZMQ_IDENTITY, id.c_str(), id.size());
+	socket.connect("tcp://localhost:5556");
 
 	auto linger = 0;
-	socket->setsockopt(ZMQ_LINGER, &linger, sizeof(linger));
+	socket.setsockopt(ZMQ_LINGER, &linger, sizeof(linger));
 
-	print_info(id, "Worker sending READY message...");
+	pp::print_debug(id, "Worker sending READY message...");
 
-	socket->send("READY", 5);
+	socket.send("READY", 5);
 
-	print_info(id, "Worker ready.");
+	pp::print_info(id, "Worker ready.");
 
 	return socket;
 }
 
 string get_id() {
 	return "ppworker-" + to_string(getpid());
-}
-
-void print_message(ostream& os, const string& id, const string& msg) {
-	os << "ppworker (" << id << "): " << msg << endl;
 }

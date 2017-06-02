@@ -18,6 +18,9 @@
     <ClCompile Include="..\..\..\robust-reliable-queuing\ppworker.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\robust-reliable-queuing\ppcommon.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\robust-reliable-queuing\ppcommon.hpp">

@@ -145,6 +145,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\robust-reliable-queuing\ppcommon.cpp" />
     <ClCompile Include="..\..\..\robust-reliable-queuing\ppqueue.cpp" />
     <ClCompile Include="..\..\..\robust-reliable-queuing\workers.cpp" />
   </ItemGroup>

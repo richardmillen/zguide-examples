@@ -17,6 +17,7 @@ namespace pp
 		bool empty() const;
 		void erase(const std::string& identity);
 		void push(const std::string& identity);
+		bool try_push(const std::string& identity);
 		void refresh(const std::string& identity);
 		const std::string& front() const;
 		void pop();
