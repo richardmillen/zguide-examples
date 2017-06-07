@@ -9,30 +9,6 @@
 #include <deque>
 using namespace std;
 
-// https://en.wikipedia.org/wiki/ANSI_escape_code#Sequence_elements
-// Sequences beginning with the CSI are named control sequences.
-
-#define ESC					0x1b
-#define left_bracket		0x5b
-
-#define second_char_min		0x40
-#define second_char_max		0x5f
-#define final_char_min		0x40
-#define final_char_max		0x7e
-
-// control sequence introducer
-static const char CSI[] = { ESC, left_bracket };
-
-// colours
-static const char red[] = "";
-static const char green[] = { ESC, left_bracket };
-static const char yellow[] = "";
-static const char blue[] = "";
-static const char purple[] = "";
-static const char cyan[] = "";
-static const char white[] = "";
-static const char reset[] = "";
-
 bool pp::check_version(int wants_major, int wants_minor) {
 	auto ver = zmq::version();
 
@@ -87,17 +63,17 @@ bool pp::was_interrupted(const deque<string> received_frames) {
 https://stackoverflow.com/questions/9965710/how-to-change-text-and-background-color */
 
 void pp::print_debug(const string & id, const string & msg) {
-	cerr << green << id << ": " << yellow << msg << white << endl;
+	cerr << "D: " << id << ": " << msg << endl;
 }
 
 void pp::print_info(const string & id, const string & msg) {
-	cout << green << id << ": " << white << msg << endl;
+	cout << "I: " << id << ": " << msg << endl;
 }
 
 void pp::print_warn(const string & id, const string & msg) {
-	cerr << green << id << ": " << cyan << msg << white << endl;
+	cerr << "W: " << id << ": " << msg << endl;
 }
 
 void pp::print_error(const string & id, const string & msg) {
-	cerr << green << id << ": " << red << msg << white << endl;
+	cerr << "E: " << id << ": " << msg << endl;
 }
