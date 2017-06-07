@@ -69,6 +69,10 @@ const std::string& pp::workers_t::front() const {
 }
 
 void pp::workers_t::pop() {
+	if (queue_.empty())
+		return;
+
+	lookup_.erase(queue_.front());
 	queue_.pop_front();
 }
 
