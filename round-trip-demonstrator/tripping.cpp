@@ -61,12 +61,16 @@ void run_async_test(zmq::socket_t& client) {
 		client.send(val.c_str(), val.size());
 	}
 
+	cout << "Receiving..." << endl;
+
 	for (size_t i = 0; i < 100'000; ++i) {
 		zmq::message_t reply;
 		client.recv(&reply);
 
+		auto val = stoi(string(static_cast<char*>(reply.data()), reply.size()));
+
 		if (i % 1'000 == 0)
-			cout << to_string(i) << " ";
+			cout << i << ": " << val << endl;
 	}
 	cout << endl;
 
@@ -90,7 +94,7 @@ void client_task() {
 	it will lose messages, making a mess of our test. */
 	this_thread::sleep_for(200ms);
 
-	run_sync_test(client);
+	//run_sync_test(client);
 	run_async_test(client);
 }
 
@@ -106,11 +110,16 @@ void worker_task() {
 		zmq::message_t request;
 		worker.recv(&request);
 
-		zmq::message_t reply(0);
-		worker.send(reply);
+		string val(static_cast<char*>(request.data()), request.size());
 
-		//if (counter++ % 1'000 == 0)
-		//	cout << "W";
+		auto num = stoi(val);
+		if (num == 99'999)
+			cout << "Final send.";
+
+		worker.send(val.c_str(), val.size());
+
+		if (num == 99'999)
+			cout << " Sent.";
 	}
 }
 
