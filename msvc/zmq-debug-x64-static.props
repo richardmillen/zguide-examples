@@ -4,6 +4,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <LibraryPath>$(LIBZMQ_ROOT)\bin\x64\Debug\v140\static;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(CPPZMQ_ROOT);$(LIBZMQ_ROOT)\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
