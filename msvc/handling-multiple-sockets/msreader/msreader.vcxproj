@@ -61,7 +61,6 @@
     <Import Project="..\..\program_options-debug-win32-static.props" />
     <Import Project="..\..\program_options-include.props" />
     <Import Project="..\..\zmq-debug-win32-static.props" />
-    <Import Project="..\..\zmq-include.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
