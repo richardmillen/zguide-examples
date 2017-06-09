@@ -3,8 +3,11 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <LibraryPath>$(BOOST_ROOT)\lib\win32;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(BOOST_ROOT)\lib\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(BOOST_ROOT);$(IncludePath)</IncludePath>
   </PropertyGroup>
-  <ItemDefinitionGroup />
+  <ItemDefinitionGroup>
+    <Link />
+  </ItemDefinitionGroup>
   <ItemGroup />
 </Project>

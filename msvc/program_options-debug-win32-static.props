@@ -3,7 +3,7 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <LibraryPath>$(BOOST_ROOT)\bin.v2\libs\program_options\build\msvc-14.0\debug\link-static\runtime-link-static\threading-multi;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(BOOST_ROOT)\lib\win32;$(LibraryPath)</LibraryPath>
     <IncludePath>$(BOOST_ROOT);$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup>
