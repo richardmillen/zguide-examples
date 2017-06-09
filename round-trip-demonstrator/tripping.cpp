@@ -61,18 +61,10 @@ void run_async_test(zmq::socket_t& client) {
 		client.send(val.c_str(), val.size());
 	}
 
-	cout << "Receiving..." << endl;
-
 	for (size_t i = 0; i < 100'000; ++i) {
 		zmq::message_t reply;
 		client.recv(&reply);
-
-		auto val = stoi(string(static_cast<char*>(reply.data()), reply.size()));
-
-		if (i % 1'000 == 0)
-			cout << i << ": " << val << endl;
 	}
-	cout << endl;
 
 	end_test(start, 100'000);
 }
@@ -80,7 +72,18 @@ void run_async_test(zmq::socket_t& client) {
 void client_task() {
 	zmq::context_t context(1);
 	zmq::socket_t client(context, ZMQ_DEALER);
+	
 	client.setsockopt(ZMQ_IDENTITY, client_id, strlen(client_id));
+	
+	/* In ZeroMQ v2.x, the HWM was infinite by default. 
+	This was easy but also typically fatal for high-volume publishers. 
+	In ZeroMQ v3.x, it's set to 1,000 by default, which is more sensible. 
+	If you're still using ZeroMQ v2.x, you should always set a HWM on your sockets, 
+	be it 1,000 to match ZeroMQ v3.x or another figure that takes into account 
+	your message sizes and expected subscriber performance. */
+	client.setsockopt<int>(ZMQ_RCVHWM, 0);
+	client.setsockopt<int>(ZMQ_SNDHWM, 0);
+
 	client.connect("tcp://localhost:5555");
 
 	cout << "Setting up test..." << endl;
@@ -94,14 +97,18 @@ void client_task() {
 	it will lose messages, making a mess of our test. */
 	this_thread::sleep_for(200ms);
 
-	//run_sync_test(client);
+	run_sync_test(client);
 	run_async_test(client);
 }
 
 void worker_task() {
 	zmq::context_t context(1);
 	zmq::socket_t worker(context, ZMQ_DEALER);
+
 	worker.setsockopt(ZMQ_IDENTITY, worker_id, strlen(worker_id));
+	worker.setsockopt<int>(ZMQ_RCVHWM, 0);
+	worker.setsockopt<int>(ZMQ_SNDHWM, 0);
+
 	worker.connect("tcp://localhost:5556");
 
 	auto counter = 0L;
@@ -110,16 +117,8 @@ void worker_task() {
 		zmq::message_t request;
 		worker.recv(&request);
 
-		string val(static_cast<char*>(request.data()), request.size());
-
-		auto num = stoi(val);
-		if (num == 99'999)
-			cout << "Final send.";
-
-		worker.send(val.c_str(), val.size());
-
-		if (num == 99'999)
-			cout << " Sent.";
+		string echo(static_cast<char*>(request.data()), request.size());
+		worker.send(echo.c_str(), echo.size());
 	}
 }
 
