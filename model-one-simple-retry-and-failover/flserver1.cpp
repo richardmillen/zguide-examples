@@ -7,6 +7,9 @@ namespace po = boost::program_options;
 #include <string>
 using namespace std;
 
+// Freelance server - Model 1
+// Trivial echo service
+
 int main(int argc, char* argv[]) {
 	int port;
 	po::options_description desc("Freelance server options");

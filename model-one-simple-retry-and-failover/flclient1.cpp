@@ -13,6 +13,9 @@ using namespace std;
 
 string try_reqrep(zmq::context_t& context, const string& endpoint, const string& request);
 
+//  Freelance client - Model 1
+//  Uses REQ socket to query one or more services
+
 int main(int argc, char* argv[]) {
 	vector<string> endpoints;
 	po::options_description desc("Freelance client options");
