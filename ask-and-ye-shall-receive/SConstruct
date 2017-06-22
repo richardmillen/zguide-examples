@@ -1,0 +1,5 @@
+# build the hello world client
+Program('hwclient.cpp')
+
+# build the hello world server
+Program('hwserver.cpp')
