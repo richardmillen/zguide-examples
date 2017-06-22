@@ -23,5 +23,14 @@
     <ClInclude Include="..\..\..\model-three-complex-and-nasty\flcliapi.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\model-three-complex-and-nasty\flcliagent.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\model-three-complex-and-nasty\flcliserver.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\model-three-complex-and-nasty\flmsg.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

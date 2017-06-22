@@ -147,7 +147,10 @@
     <ClCompile Include="..\..\..\model-three-complex-and-nasty\flclient3.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\model-three-complex-and-nasty\flcliagent.hpp" />
     <ClInclude Include="..\..\..\model-three-complex-and-nasty\flcliapi.hpp" />
+    <ClInclude Include="..\..\..\model-three-complex-and-nasty\flmsg.hpp" />
+    <ClInclude Include="..\..\..\model-three-complex-and-nasty\flcliserver.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

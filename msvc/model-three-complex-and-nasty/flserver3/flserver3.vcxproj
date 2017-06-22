@@ -147,6 +147,9 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\model-three-complex-and-nasty\flserver3.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\model-three-complex-and-nasty\flmsg.hpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

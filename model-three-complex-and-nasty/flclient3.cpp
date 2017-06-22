@@ -1,5 +1,6 @@
 
 #include "flcliapi.hpp"
+using namespace fl3;
 
 #include <iostream>
 #include <chrono>
