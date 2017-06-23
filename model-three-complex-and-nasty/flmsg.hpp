@@ -32,5 +32,9 @@ namespace fl3 {
 				socket.send(it->c_str(), it->size(), ZMQ_SNDMORE);
 			socket.send(last->c_str(), last->size());
 		}
+
+		void send_msg(zmq::socket_t& socket, flframe_t frame) {
+			socket.send(frame.c_str(), frame.size());
+		}
 	}
 }
