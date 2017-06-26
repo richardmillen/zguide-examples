@@ -10,15 +10,12 @@
 #include <memory>
 #include <chrono>
 #include <deque>
-#include <unordered_set>
 #include <unordered_map>
 #include <functional>
 
 #include <zmq.hpp>
 
 namespace fl3 {
-
-	#define PING_INTERVAL		std::chrono::seconds(2)
 
 	class flcliagent_t {
 	public:
@@ -43,15 +40,14 @@ namespace fl3 {
 		flmsg_t request_;															// current request if any
 		flmsg_t reply_;																// current reply if any
 		std::deque<flcliserver_t> alive_servers_;									// servers we know are alive
-		std::unordered_set<flcliserver_t, flcliserver_t::hash> conns_;				// servers we're connected to
-		std::unordered_map<std::string, flcliserver_t> conn_map_;
+		std::unordered_map<std::string, flcliserver_t> conn_map_;					// servers we're connected to (name-to-server table)
 		unsigned sequence_;															// number of requests ever sent
 	};
 
 	flcliagent_t::flcliagent_t(zmq::context_t& context)
 		: context_{ context }, router_{ context_, ZMQ_ROUTER }, 
 		  request_{}, reply_{}, 
-		  alive_servers_{}, conns_{},
+		  alive_servers_{}, conn_map_{},
 		  sequence_{ 0 } {
 
 		apipipe_ = std::make_unique<zmq::socket_t>(context_, ZMQ_PAIR);
@@ -84,10 +80,11 @@ namespace fl3 {
 			if (!request_.empty() && tickless > expires_)
 				tickless = expires_;
 
-			std::for_each(conns_.begin(), conns_.end(), [&](const flcliserver_t& server) {
+			for (auto& pair : conn_map_) {
+				auto& server = pair.second;
 				if (tickless > server.ping_at())
 					tickless = server.ping_at();
-			});
+			}
 
 			auto timeout = tickless - std::chrono::system_clock::now();
 			int rc = zmq::poll(items, 2, std::chrono::duration_cast<std::chrono::milliseconds>(timeout));
@@ -120,10 +117,8 @@ namespace fl3 {
 				}
 			}
 
-			// https://github.com/richardmillen/zguide-examples/issues/23
-			for (auto& server : conns_) {
-				ping(const_cast<flcliserver_t&>(server));
-			}
+			for (auto& server : conn_map_)
+				ping(server.second);
 		}
 	}
 
@@ -136,7 +131,24 @@ namespace fl3 {
 	/* 
 	 */
 	void flcliagent_t::on_router_message() {
-		// https://github.com/richardmillen/zguide-examples/issues/23
+		auto reply = utils::recv_msg(router_);
+
+		// frame 1 is server that replied
+		auto endpoint = reply.front();
+		reply.pop_front();
+
+		assert(conn_map_.count(endpoint));
+		auto& server = conn_map_[endpoint];
+		
+		if (!server.alive()) {
+			alive_servers_.push_back(server);
+			server.alive(true);
+		}
+
+		server.next_ping(PING_INTERVAL);
+		server.ttl(SERVER_TTL);
+
+		// http://zguide.zeromq.org/page:all#Model-Three-Complex-and-Nasty
 	}
 
 	/* disconnect and delete any expired servers

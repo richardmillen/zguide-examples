@@ -6,6 +6,9 @@
 
 namespace fl3 {
 
+#define PING_INTERVAL		std::chrono::seconds(2)
+#define SERVER_TTL			std::chrono::seconds(6)
+
 	class flcliserver_t {
 	public:
 		flcliserver_t(const std::string& endpoint);
@@ -13,8 +16,9 @@ namespace fl3 {
 		const std::string& endpoint() const;
 		void alive(const bool& v);
 		bool flcliserver_t::alive() const;
-		std::chrono::time_point<std::chrono::system_clock> ping_at() const;
+		void ttl(const std::chrono::milliseconds& interval);
 		bool expired() const;
+		std::chrono::time_point<std::chrono::system_clock> ping_at() const;
 		void next_ping(const std::chrono::milliseconds& interval);
 	public:
 		struct hash {
@@ -30,8 +34,11 @@ namespace fl3 {
 	};
 
 	flcliserver_t::flcliserver_t(const std::string& endpoint) 
-		: endpoint_{ endpoint } 
-	{}
+		: endpoint_{ endpoint }, alive_{ false } {
+
+		this->next_ping(PING_INTERVAL);
+		this->ttl(SERVER_TTL);
+	}
 
 	const std::string& flcliserver_t::endpoint() const {
 		return endpoint_;
@@ -45,12 +52,16 @@ namespace fl3 {
 		return alive_;
 	}
 
-	std::chrono::time_point<std::chrono::system_clock> flcliserver_t::ping_at() const {
-		return ping_at_;
+	void flcliserver_t::ttl(const std::chrono::milliseconds& interval) {
+		expires_ = std::chrono::system_clock::now() + interval;
 	}
 
 	bool flcliserver_t::expired() const {
 		return std::chrono::system_clock::now() >= expires_;
+	}
+
+	std::chrono::time_point<std::chrono::system_clock> flcliserver_t::ping_at() const {
+		return ping_at_;
 	}
 
 	void flcliserver_t::next_ping(const std::chrono::milliseconds& interval) {
