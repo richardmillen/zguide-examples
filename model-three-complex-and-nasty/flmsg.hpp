@@ -36,5 +36,9 @@ namespace fl3 {
 		void send_msg(zmq::socket_t& socket, flframe_t frame) {
 			socket.send(frame.c_str(), frame.size());
 		}
+
+		void dump_msg(flmsg_t msg) {
+			// TODO: implement dump
+		}
 	}
 }

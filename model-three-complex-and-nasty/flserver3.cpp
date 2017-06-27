@@ -1,3 +1,5 @@
+#include "flmsg.hpp"
+using namespace fl3;
 
 #include <zmq.hpp>
 
@@ -8,9 +10,9 @@
 #include <deque>
 using namespace std;
 
-deque<string> recv_frames(zmq::socket_t& socket);
-void send_frames(zmq::socket_t& socket, const deque<string>& frames);
-void dump_frames(const deque<string>& frames);
+//deque<string> recv_frames(zmq::socket_t& socket);
+//void send_frames(zmq::socket_t& socket, const deque<string>& frames);
+//void dump_frames(const deque<string>& frames);
 
 int main(int argc, char* argv[]) {
 	bool verbose = (argc > 1 && boost::iequals(argv[1], "-v"));
@@ -26,14 +28,14 @@ int main(int argc, char* argv[]) {
 	cout << "flserver3: service is ready at " << conn_addr << "..." << endl;
 
 	while (true) {
-		auto request = recv_frames(server);
+		auto request = utils::recv_msg(server);
 		if (request.empty()) {
 			cerr << "flserver3: interrupted." << endl;
 			break;
 		}
 
 		if (verbose)
-			dump_frames(request);
+			utils::dump_msg(request);
 
 		// Frame 0: identity of client
 		// Frame 1: PING, or client control frame
@@ -55,15 +57,15 @@ int main(int argc, char* argv[]) {
 		reply.push_front(identity);
 
 		if (verbose)
-			dump_frames(reply);
+			utils::dump_msg(reply);
 
-		send_frames(server, reply);
+		utils::send_msg(server, reply);
 	}
 
 	return 0;
 }
 
-deque<string> recv_frames(zmq::socket_t& socket) {
+/*deque<string> recv_frames(zmq::socket_t& socket) {
 	deque<string> frames;
 
 	do {
@@ -95,4 +97,4 @@ void send_frames(zmq::socket_t& socket, const deque<string>& frames) {
 
 void dump_frames(const deque<string>& frames) {
 	// TODO: implement dump
-}
+}*/
