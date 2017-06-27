@@ -32,10 +32,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	auto elapsed = chrono::system_clock::now() - start;
+	auto reply_count = TOTAL_REQUESTS - requests;
+
 	auto secs = chrono::duration_cast<chrono::seconds>(elapsed);
 	auto ms = chrono::duration_cast<chrono::milliseconds>(elapsed);
 	auto ns = chrono::duration_cast<chrono::nanoseconds>(elapsed);
-	auto reply_count = TOTAL_REQUESTS - requests;
 
 	cout << "flclient3: " << secs.count() << ", received " << reply_count << " replies." << endl;
 	cout << "flclient3: Average round trip cost: " <<

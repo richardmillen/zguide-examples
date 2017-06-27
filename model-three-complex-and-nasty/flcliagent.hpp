@@ -6,6 +6,7 @@
 #include "flmsg.hpp"
 #include "flcliserver.hpp"
 
+#include <iostream>
 #include <thread>
 #include <memory>
 #include <chrono>
@@ -16,6 +17,8 @@
 #include <zmq.hpp>
 
 namespace fl3 {
+
+#define GLOBAL_TIMEOUT			std::chrono::seconds(3)
 
 	class flcliagent_t {
 	public:
@@ -30,18 +33,18 @@ namespace fl3 {
 		flmsg_t recv();
 		void send(std::initializer_list<flframe_t> frames);
 	private:
-		zmq::context_t& context_;													// shared context (differs from example; 'own context')
-		zmq::socket_t router_;														// socket to talk to servers
-		std::unique_ptr<zmq::socket_t> apipipe_;									// socket application/api uses to talk to us
-		std::unique_ptr<zmq::socket_t> pipe_;										// socket to talk back to application/api
-		std::unique_ptr<std::thread> thread_;										// agent thread
+		zmq::context_t& context_;														// shared context (differs from example; 'own context')
+		zmq::socket_t router_;															// socket to talk to servers
+		std::unique_ptr<zmq::socket_t> apipipe_;										// socket application/api uses to talk to us
+		std::unique_ptr<zmq::socket_t> pipe_;											// socket to talk back to application/api
+		std::unique_ptr<std::thread> thread_;											// agent thread
 	private:
-		std::chrono::time_point<std::chrono::system_clock> expires_;				// timeout for request/reply
-		flmsg_t request_;															// current request if any
-		flmsg_t reply_;																// current reply if any
-		std::deque<flcliserver_t> alive_servers_;									// servers we know are alive
-		std::unordered_map<std::string, flcliserver_t> conn_map_;					// servers we're connected to (name-to-server table)
-		unsigned sequence_;															// number of requests ever sent
+		std::chrono::time_point<std::chrono::system_clock> expires_;					// timeout for request/reply
+		flmsg_t request_;																// current request if any
+		flmsg_t reply_;																	// current reply if any
+		std::deque<std::shared_ptr<flcliserver_t>> alive_servers_;						// servers we know are alive
+		std::unordered_map<std::string, std::shared_ptr<flcliserver_t>> conn_map_;		// servers we're connected to (name-to-server table)
+		unsigned sequence_;																// number of requests ever sent
 	};
 
 	flcliagent_t::flcliagent_t(zmq::context_t& context)
@@ -56,8 +59,7 @@ namespace fl3 {
 		pipe_ = std::make_unique<zmq::socket_t>(context_, ZMQ_PAIR);
 		pipe_->connect("inproc://agent");
 
-		//https://github.com/richardmillen/zguide-examples/issues/23
-		//thread_ = std::make_unique<std::thread>(&flcliagent_t::agent_task, this);
+		thread_ = std::make_unique<std::thread>(&flcliagent_t::agent_task, this);
 	}
 
 	flcliagent_t::~flcliagent_t() {
@@ -81,9 +83,9 @@ namespace fl3 {
 				tickless = expires_;
 
 			for (auto& pair : conn_map_) {
-				auto& server = pair.second;
-				if (tickless > server.ping_at())
-					tickless = server.ping_at();
+				auto server = pair.second;
+				if (tickless > server->ping_at())
+					tickless = server->ping_at();
 			}
 
 			auto timeout = tickless - std::chrono::system_clock::now();
@@ -106,49 +108,88 @@ namespace fl3 {
 					// find server to talk to, remove any expired ones
 					while (!alive_servers_.empty()) {
 						auto server = alive_servers_.front();
-						if (!server.expired()) {
-							request_.push_front(server.endpoint());
+						if (!server->expired()) {
+							request_.push_front(server->endpoint());
 							utils::send_msg(router_, request_);
 							break;
 						}
 						alive_servers_.pop_front();
-						server.alive(false);
+						server->alive(false);
 					}
 				}
 			}
 
-			for (auto& server : conn_map_)
-				ping(server.second);
+			for (auto& pair : conn_map_)
+				ping(*(pair.second));
 		}
 	}
 
-	/* 
-	 */
+	/* this method processes one message from
+	 * the pipe; the inproc pair socket connected
+	 * to the client api */
 	void flcliagent_t::on_control_message() {
-		// https://github.com/richardmillen/zguide-examples/issues/23
+		auto msg{ utils::recv_msg(*pipe_) };
+		
+		auto command{ msg.front() };
+		msg.pop_front();
+
+		if (command == "CONNECT") {
+			auto endpoint{ msg.front() };
+
+			std::cout << "flcliagent: connecting to " << endpoint << "..." << std::endl;
+			router_.connect(endpoint);
+
+			auto server{ std::make_shared<flcliserver_t>(endpoint) };
+			conn_map_[endpoint] = server;
+			alive_servers_.push_back(server);
+
+			server->next_ping(PING_INTERVAL);
+			server->ttl(SERVER_TTL);
+		}
+		else if (command == "REQUEST") {
+			assert(request_.empty());			// strict request-reply cycle
+			
+			// prefix request with sequence number and empty envelope					<------ where's the empty envelope?
+			msg.push_front(std::to_string(++sequence_));
+			// take ownership of request message
+			request_ = msg;
+			// request expires after global timeout
+			expires_ = std::chrono::system_clock::now() + GLOBAL_TIMEOUT;
+		}
 	}
 
-	/* 
-	 */
+	/* this method processes one message from
+	 * a connected server.
+	 * Frame 0: identity of server
+	 * Frame 1: PONG, or control frame
+	 * Frame 2: "OK" */
 	void flcliagent_t::on_router_message() {
 		auto reply = utils::recv_msg(router_);
 
-		// frame 1 is server that replied
-		auto endpoint = reply.front();
+		// frame 0 is server that replied
+		auto endpoint{ reply.front() };
 		reply.pop_front();
 
 		assert(conn_map_.count(endpoint));
 		auto& server = conn_map_[endpoint];
 		
-		if (!server.alive()) {
+		if (!server->alive()) {
 			alive_servers_.push_back(server);
-			server.alive(true);
+			server->alive(true);
 		}
 
-		server.next_ping(PING_INTERVAL);
-		server.ttl(SERVER_TTL);
+		server->next_ping(PING_INTERVAL);
+		server->ttl(SERVER_TTL);
 
-		// http://zguide.zeromq.org/page:all#Model-Three-Complex-and-Nasty
+		// frame 1 may be sequence number for reply
+		auto sequence{ reply.front() };
+		reply.pop_front();
+
+		if (stoi(sequence) != sequence_)
+			return;
+
+		reply.push_front("OK");
+		utils::send_msg(*pipe_, reply);
 	}
 
 	/* disconnect and delete any expired servers
@@ -176,9 +217,4 @@ namespace fl3 {
 	void flcliagent_t::send(std::initializer_list<flframe_t> frames) {
 		utils::send_msg(*apipipe_, flmsg_t{ frames });
 	}
-
-	// Frame 0: identity of server
-	// Frame 1: PONG, or control frame
-	// Frame 2: "OK"
-
 }
