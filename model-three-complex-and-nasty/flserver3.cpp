@@ -10,15 +10,17 @@ using namespace fl3;
 #include <deque>
 using namespace std;
 
-//deque<string> recv_frames(zmq::socket_t& socket);
-//void send_frames(zmq::socket_t& socket, const deque<string>& frames);
-//void dump_frames(const deque<string>& frames);
+bool get_verbose(int argc, char* argv[]);
+unsigned get_port(int argc, char* argv[]);
+
+#define DEFAULT_PORT		5555
 
 int main(int argc, char* argv[]) {
-	bool verbose = (argc > 1 && boost::iequals(argv[1], "-v"));
+	auto verbose = get_verbose(argc, argv);
+	auto port = get_port(argc, argv);
 
-	string bind_addr("tcp://*:5555");
-	string conn_addr("tcp://localhost:5555");
+	string bind_addr("tcp://*:" + to_string(port));
+	string conn_addr("tcp://localhost:" + to_string(port));
 
 	zmq::context_t context(1);
 	zmq::socket_t server(context, ZMQ_ROUTER);
@@ -26,6 +28,8 @@ int main(int argc, char* argv[]) {
 	server.bind(bind_addr);
 
 	cout << "flserver3: service is ready at " << conn_addr << "..." << endl;
+	if (verbose)
+		cout << "flserver3: running in verbose mode..." << endl;
 
 	while (true) {
 		auto request = utils::recv_msg(server);
@@ -35,7 +39,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (verbose)
-			utils::dump_msg(request);
+			utils::dump_msg("flserver3: request received by " + conn_addr, request);
 
 		// Frame 0: identity of client
 		// Frame 1: PING, or client control frame
@@ -57,7 +61,7 @@ int main(int argc, char* argv[]) {
 		reply.push_front(identity);
 
 		if (verbose)
-			utils::dump_msg(reply);
+			utils::dump_msg("flserver3: reply sent by " + conn_addr, reply);
 
 		utils::send_msg(server, reply);
 	}
@@ -65,36 +69,25 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-/*deque<string> recv_frames(zmq::socket_t& socket) {
-	deque<string> frames;
-
-	do {
-		zmq::message_t message;
-		if (!socket.recv(&message))
-			return deque<string>();
-
-		frames.push_back(string(static_cast<char*>(message.data()), message.size()));
-
-	} while (socket.getsockopt<int>(ZMQ_RCVMORE));
-
-	return frames;
+bool get_verbose(int argc, char* argv[]) {
+	for (size_t argn = 1; argn < argc; ++argn)
+		if (boost::iequals(argv[argn], "-v"))
+			return true;
+	
+	return false;
 }
 
-void send_frames(zmq::socket_t& socket, const deque<string>& frames) {
-	auto is_last = [&](auto it) {
-		return (it != frames.end()) && ((it + 1) == frames.end());
-	};
-	auto send_next = [&](auto next) {
-		if (is_last(next)) {
-			socket.send(next->c_str(), next->size());
-		}
-		else {
-			socket.send(next->c_str(), next->size(), ZMQ_SNDMORE);
-		}
-	};
-	send_next(frames.begin());
+/* get_port returns the first numeric argument
+ * as a port number to be used by the server. */
+unsigned get_port(int argc, char* argv[]) {
+	for (size_t argn = 1; argn < argc; ++argn) {
+		char* end;
+		auto arg = argv[argn];
+		auto port = strtol(argv[argn], &end, 10);
+		if (arg != end)
+			return port;
+	}
+
+	return DEFAULT_PORT;
 }
 
-void dump_frames(const deque<string>& frames) {
-	// TODO: implement dump
-}*/

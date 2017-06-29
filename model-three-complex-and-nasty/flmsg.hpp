@@ -2,6 +2,7 @@
 
 #include <zmq.hpp>
 
+#include <iostream>
 #include <string>
 #include <deque>
 #include <initializer_list>
@@ -26,19 +27,22 @@ namespace fl3 {
 			return msg;
 		}
 
-		void send_msg(zmq::socket_t& socket, flmsg_t msg) {
+		void send_msg(zmq::socket_t& socket, const flmsg_t& msg) {
 			auto last = msg.end() - 1;
 			for (auto& it = msg.begin(); it != last; ++it)
 				socket.send(it->c_str(), it->size(), ZMQ_SNDMORE);
 			socket.send(last->c_str(), last->size());
 		}
 
-		void send_msg(zmq::socket_t& socket, flframe_t frame) {
+		void send_msg(zmq::socket_t& socket, const flframe_t& frame) {
 			socket.send(frame.c_str(), frame.size());
 		}
 
-		void dump_msg(flmsg_t msg) {
-			// TODO: implement dump
+		void dump_msg(const std::string& hint, const flmsg_t& msg) {
+			std::cout << hint << std::endl;
+			for (size_t i = 0; i < msg.size(); ++i) {
+				std::cout << "\t" << i << ": " << msg[i] << std::endl;
+			}
 		}
 	}
 }

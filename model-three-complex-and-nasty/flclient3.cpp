@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
 	auto ms = chrono::duration_cast<chrono::milliseconds>(elapsed);
 	auto ns = chrono::duration_cast<chrono::nanoseconds>(elapsed);
 
-	cout << "flclient3: " << secs.count() << ", received " << reply_count << " replies." << endl;
+	cout << "flclient3: " << secs.count() << " seconds, received " << reply_count << " replies." << endl;
 	cout << "flclient3: Average round trip cost: " <<
 		"\t" << ms.count() / reply_count << " ms" << endl <<
 		"\t" << ns.count() / reply_count << " ns" << endl;

@@ -29,6 +29,7 @@ namespace fl3 {
 		void on_control_message();
 		void on_router_message();
 		void ping(flcliserver_t& server);
+		int stoseq(const std::string& str);
 	public:
 		flmsg_t recv();
 		void send(std::initializer_list<flframe_t> frames);
@@ -103,6 +104,7 @@ namespace fl3 {
 			if (!request_.empty()) {
 				if (std::chrono::system_clock::now() >= expires_) {
 					utils::send_msg(*pipe_, "FAILED");
+					request_.clear();
 				}
 				else {
 					// find server to talk to, remove any expired ones
@@ -184,12 +186,14 @@ namespace fl3 {
 		// frame 1 may be sequence number for reply
 		auto sequence{ reply.front() };
 		reply.pop_front();
-
-		if (stoi(sequence) != sequence_)
+		
+		auto seq_no = stoseq(sequence);
+		if (seq_no != -1 && seq_no != sequence_)
 			return;
 
 		reply.push_front("OK");
 		utils::send_msg(*pipe_, reply);
+		request_.clear();
 	}
 
 	/* disconnect and delete any expired servers
@@ -204,6 +208,18 @@ namespace fl3 {
 		
 		utils::send_msg(router_, msg);
 		server.next_ping(PING_INTERVAL);
+	}
+
+	/* converts the specified string into a valid unsigned 
+	 * sequence number, or returns -1. 
+	 * strtol sets 'end' to the value of 'str' if no conversion 
+	 * was performed. */
+	int flcliagent_t::stoseq(const std::string& str) {
+		char* end;
+		auto seq_no = strtol(str.c_str(), &end, 10);
+		if (*end == 0)
+			return seq_no;
+		return -1;
 	}
 
 	/* recv wraps the api-to-agent call to receive message
